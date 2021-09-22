@@ -594,6 +594,12 @@ class FreqtradeBot(LoggingMixin):
 
         return True
 
+    def merge_average_trade(self, trade: Trade, order_id: str) -> bool:
+        self.update_trade_to_merge(trade, order_id)
+        Trade.query.session.add(trade)
+        Trade.commit()
+        return True
+
     def _notify_buy(self, trade: Trade, order_type: str) -> None:
         """
         Sends rpc notification when a buy occurred.
@@ -1278,6 +1284,54 @@ class FreqtradeBot(LoggingMixin):
                 order['amount'] = new_amount
                 order.pop('filled', None)
                 trade.recalc_open_trade_value()
+        except DependencyException as exception:
+            logger.warning("Could not update trade amount: %s", exception)
+
+        if self.exchange.check_order_canceled_empty(order):
+            # Trade has been cancelled on exchange
+            # Handling of this will happen in check_handle_timeout.
+            return True
+        trade.update(order)
+        Trade.commit()
+
+        # Updating wallets when order is closed
+        if not trade.is_open:
+            if not stoploss_order and not trade.open_order_id:
+                self._notify_sell(trade, '', True)
+            self.protections.stop_per_pair(trade.pair)
+            self.protections.global_stop()
+            self.wallets.update()
+        elif not trade.open_order_id:
+            # Buy fill
+            self._notify_buy_fill(trade)
+
+        return False
+
+    def update_trade_to_merge(self, trade: Trade, order_id: str, action_order: Dict[str, Any] = None,
+                           stoploss_order: bool = False) -> bool:
+        if not order_id:
+            logger.warning(f'Orderid for trade {trade} is empty.')
+            return False
+
+        # Update trade with order values
+        logger.info('Found open order for %s', trade)
+        try:
+            order = action_order or self.exchange.fetch_order_or_stoploss_order(order_id,
+                                                                                trade.pair,
+                                                                                stoploss_order)
+        except InvalidOrderException as exception:
+            logger.warning('Unable to fetch order %s: %s', order_id, exception)
+            return False
+
+        trade.update_order(order)
+
+        # Try update
+        try:
+            order['amount'] = trade.amount
+            order['cost'] = trade.stake_amount
+            order['price'] = trade.open_rate
+            order.pop('filled', None)
+            trade.recalc_open_trade_value()
         except DependencyException as exception:
             logger.warning("Could not update trade amount: %s", exception)
 

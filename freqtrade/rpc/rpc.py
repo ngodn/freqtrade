@@ -246,6 +246,149 @@ class RPC:
             columns = ['ID', 'Pair', 'Since', profitcol]
             return trades_list, columns, fiat_profit_sum
 
+    def _rpc_average(self, pair: str, stake_currency: str,
+                          fiat_display_currency: str) -> Tuple[List, List, float, float, float, float]:
+        pairexist = Trade.get_trades(trade_filter=[Trade.pair == pair]).first()
+        if not pairexist:
+            logger.warning('average trade: pair not found')
+            raise RPCException(f"Pair {pair} not found.")
+        # pairtrades = Trade.get_trades(trade_filter=[Trade.pair == pair])
+        trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
+        pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
+        if not pairtrades:
+            raise RPCException(f"Need at least 2 {pair} trades to calculate the average.")
+        else:
+            pairtrades_list = []
+            fiat_profit_sum = NAN            
+            total_average_price = 0.0
+            total_profit_percentage = 0.0
+
+            trade_open_rate_list = []
+            trade_amount_list = []
+            trade_fee_list = []
+            latest_price = 0.0
+            new_trade_percent = NAN
+
+            for pairtrade in pairtrades:
+                try:
+                    current_rate = self._freqtrade.exchange.get_rate(
+                        pairtrade.pair, refresh=False, side="sell")
+                except (PricingError, ExchangeError):
+                    current_rate = NAN
+                trade_percent = (100 * pairtrade.calc_profit_ratio(current_rate))
+                trade_profit = pairtrade.calc_profit(current_rate)
+                profit_str = f'{trade_percent:.2f}%'
+                trade_amount = pairtrade.amount
+                trade_openrate = pairtrade.open_rate
+                if self._fiat_converter:
+                    fiat_profit = self._fiat_converter.convert_amount(
+                        trade_profit,
+                        stake_currency,
+                        fiat_display_currency
+                    )
+                    if fiat_profit and not isnan(fiat_profit):
+                        profit_str += f" ({fiat_profit:.2f})"
+                        fiat_profit_sum = fiat_profit if isnan(fiat_profit_sum) \
+                            else fiat_profit_sum + fiat_profit
+                pairtrades_list.append([
+                    pairtrade.id,
+                    trade_amount,
+                    trade_openrate,
+                    profit_str
+                ])
+                # trade_avg_price = pairtrade.stake_amount / pairtrade.amount
+                trade_open_rate_list.append(pairtrade.open_rate)
+                trade_amount_list.append(pairtrade.amount)
+                trade_fee_list.append(pairtrade.fee_open)
+
+            profitcol = "Profit"
+            if self._fiat_converter:
+                profitcol += " (" + fiat_display_currency + ")"
+
+            total_average_price = float(sum(trade_open_rate_list) / len(trade_open_rate_list))
+
+            total_amount = sum(trade_amount_list)
+
+            try:
+                pair_current_rate = self._freqtrade.exchange.get_rate(
+                    pair, refresh=False, side="sell")
+            except (PricingError, ExchangeError):
+                    pair_current_rate = NAN
+            sell_trade = Decimal(total_amount) * Decimal(pair_current_rate)
+            sell_fee = sell_trade * Decimal(trade_fee_list[-1])
+            close_trade_value = sell_trade - sell_fee
+
+            buy_trade = Decimal(total_amount) * Decimal(total_average_price)
+            buy_fee = buy_trade * Decimal(trade_fee_list[-1])
+            avg_open_trade_value = buy_trade + buy_fee
+
+            new_profit_ratio = (close_trade_value / avg_open_trade_value) - 1
+            new_trade_percent = (100 * new_profit_ratio)
+
+            total_profit_percentage = f'{new_trade_percent:.2f}%'
+        
+            columns = ['ID', 'Amount', 'Price', profitcol]
+            return pairtrades_list, columns, fiat_profit_sum, total_amount, total_average_price, total_profit_percentage
+
+    def _rpc_merge_average(self, pair: str) -> Tuple[List]:
+        pairexist = Trade.get_trades(trade_filter=[Trade.pair == pair]).first()
+        if not pairexist:
+            logger.warning('merge trade: pair not found')
+            raise RPCException(f"Pair {pair} not found.")
+        trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
+        pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
+        if not pairtrades:
+            raise RPCException(f"No similar {pair} trades to merge.")
+        else:
+            trade_open_rate_list = []
+            trade_amount_list = []
+            trade_stake_amount_list = []
+            trade_open_date_list = []
+            trade_fee_open_list = []
+            trade_fee_close_list = []
+            trade_exchange_list = []
+            trade_open_order_id_list = []
+            trade_strategy_list = []
+            trade_buy_tag_list = []
+            trade_timeframe_list = []
+            trade_id_list = []
+
+            for pairtrade in pairtrades:
+                trade_open_rate_list.append(pairtrade.open_rate)
+                trade_amount_list.append(pairtrade.amount)
+                trade_stake_amount_list.append(pairtrade.stake_amount)
+                trade_open_date_list.append(pairtrade.open_date)
+                trade_fee_open_list.append(pairtrade.fee_open)
+                trade_fee_close_list.append(pairtrade.fee_close)
+                trade_exchange_list.append(pairtrade.exchange)
+                trade_open_order_id_list.append(pairtrade.open_order_id)
+                trade_strategy_list.append(pairtrade.strategy)
+                trade_buy_tag_list.append(pairtrade.buy_tag)
+                trade_timeframe_list.append(pairtrade.timeframe)
+                trade_id_list.append(pairtrade.id)
+
+            # fee = self.exchange.get_fee(symbol=pair, taker_or_maker='maker')
+            new_trade = Trade(
+                pair=pair,
+                stake_amount=sum(trade_stake_amount_list),
+                amount=sum(trade_amount_list),
+                is_open=True,
+                # amount_requested=amount_requested,
+                fee_open=trade_fee_open_list[-1],
+                fee_close=trade_fee_close_list[-1],
+                open_rate=float(sum(trade_open_rate_list)/len(trade_open_rate_list)),
+                # open_rate_requested=buy_limit_requested,
+                open_date=trade_open_date_list[-1],
+                exchange=trade_exchange_list[-1],
+                open_order_id=trade_open_order_id_list[-1],
+                strategy=trade_strategy_list[-1],
+                buy_tag=trade_buy_tag_list[-1],
+                timeframe=trade_timeframe_list[-1]
+            )
+            self._freqtrade.merge_average_trade(new_trade, trade_open_order_id_list[-1])
+            
+            return trade_id_list
+
     def _rpc_daily_profit(
             self, timescale: int,
             stake_currency: str, fiat_display_currency: str) -> Dict[str, Any]:
