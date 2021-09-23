@@ -161,6 +161,16 @@ class IStrategy(ABC, HyperStrategyMixin):
         :return: DataFrame with sell column
         """
         return dataframe
+    
+    @abstractmethod
+    def populate_dca_rebuy(self, dataframe: DataFrame, metadata: dict, trade: Trade) -> DataFrame:
+        """
+        Based on TA indicators, populates dca for the given dataframe
+        :param dataframe: DataFrame
+        :param metadata: Additional information, like the currently traded pair
+        :return: DataFrame with buy column
+        """
+        return dataframe
 
     def check_buy_timeout(self, pair: str, trade: Trade, order: dict, **kwargs) -> bool:
         """
@@ -433,6 +443,15 @@ class IStrategy(ABC, HyperStrategyMixin):
         dataframe = self.advise_indicators(dataframe, metadata)
         dataframe = self.advise_buy(dataframe, metadata)
         dataframe = self.advise_sell(dataframe, metadata)
+
+        ### Trying to get Trade for 
+        try:
+            trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
+            dataframe = self.advise_dca(dataframe, metadata, trade)
+        except:
+            logger.debug("No open Trade found")
+
+
         return dataframe
 
     def _analyze_ticker_internal(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -831,3 +850,15 @@ class IStrategy(ABC, HyperStrategyMixin):
             return self.populate_sell_trend(dataframe)  # type: ignore
         else:
             return self.populate_sell_trend(dataframe, metadata)
+    def advise_dca(self, dataframe: DataFrame, metadata: dict, trade: Trade) -> DataFrame:
+        """
+        Based on TA indicators, populates the dca signal for the given dataframe
+        This method should not be overridden.
+        :param dataframe: DataFrame
+        :param metadata: Additional information dictionary, with details like the
+            currently traded pair
+        :param Trade: Trade
+        :return: DataFrame with sell column
+        """
+        return self.populate_dca_rebuy(dataframe,metadata,trade)
+
