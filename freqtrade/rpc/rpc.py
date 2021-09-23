@@ -748,9 +748,9 @@ class RPC:
         # check if valid pair
 
         # check if pair already has an open pair
-        trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
-        if trade:
-            raise RPCException(f'position for {pair} already open - id: {trade.id}')
+        # trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
+        # if trade:
+        #     raise RPCException(f'position for {pair} already open - id: {trade.id}')
 
         # gen stake amount
         stakeamount = self._freqtrade.wallets.get_trade_stake_amount(pair)
