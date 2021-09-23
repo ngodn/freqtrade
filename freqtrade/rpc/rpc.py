@@ -2,6 +2,7 @@
 This module contains class to define a RPC communications
 """
 import logging
+from decimal import Decimal
 from abc import abstractmethod
 from datetime import date, datetime, timedelta, timezone
 from math import isnan
