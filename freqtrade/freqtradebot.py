@@ -594,11 +594,64 @@ class FreqtradeBot(LoggingMixin):
 
         return True
 
-    def merge_average_trade(self, trade: Trade, order_id: str) -> bool:
-        self.update_trade_to_merge(trade, order_id)
-        Trade.query.session.add(trade)
-        Trade.commit()
-        return True
+    def merge_average_trade(self, pair: str) -> bool:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
+        pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
+        if not pairtrades:
+            raise RPCException(f"No similar {pair} trades to merge.")
+        else:
+            trade_open_rate_list = []
+            trade_amount_list = []
+            trade_stake_amount_list = []
+            trade_open_date_list = []
+            trade_fee_open_list = []
+            trade_fee_close_list = []
+            trade_exchange_list = []
+            trade_open_order_id_list = []
+            trade_strategy_list = []
+            trade_buy_tag_list = []
+            trade_timeframe_list = []
+            trade_id_list = []
+
+            for pairtrade in pairtrades:
+                trade_open_rate_list.append(pairtrade.open_rate)
+                trade_amount_list.append(pairtrade.amount)
+                trade_stake_amount_list.append(pairtrade.stake_amount)
+                trade_open_date_list.append(pairtrade.open_date)
+                trade_fee_open_list.append(pairtrade.fee_open)
+                trade_fee_close_list.append(pairtrade.fee_close)
+                trade_exchange_list.append(pairtrade.exchange)
+                trade_open_order_id_list.append(pairtrade.open_order_id)
+                trade_strategy_list.append(pairtrade.strategy)
+                trade_buy_tag_list.append(pairtrade.buy_tag)
+                trade_timeframe_list.append(pairtrade.timeframe)
+                trade_id_list.append(pairtrade.id)
+
+            # fee = self.exchange.get_fee(symbol=pair, taker_or_maker='maker')
+            new_trade = Trade(
+                pair=pair,
+                stake_amount=sum(trade_stake_amount_list),
+                amount=sum(trade_amount_list),
+                is_open=True,
+                # amount_requested=amount_requested,
+                fee_open=trade_fee_open_list[-1],
+                fee_close=trade_fee_close_list[-1],
+                open_rate=float(sum(trade_open_rate_list)/len(trade_open_rate_list)),
+                # open_rate_requested=buy_limit_requested,
+                open_date=trade_open_date_list[-1],
+                exchange=trade_exchange_list[-1],
+                open_order_id=trade_open_order_id_list[-1],
+                strategy=trade_strategy_list[-1],
+                buy_tag=trade_buy_tag_list[-1],
+                timeframe=trade_timeframe_list[-1]
+            )
+
+            self.update_trade_to_merge(new_trade, trade_open_order_id_list[-1])
+            Trade.query.session.add(new_trade)
+            Trade.commit()
+            return True
+
+        return False
 
     def _notify_buy(self, trade: Trade, order_type: str) -> None:
         """

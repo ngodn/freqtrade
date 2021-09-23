@@ -332,62 +332,15 @@ class RPC:
             return pairtrades_list, columns, fiat_profit_sum, total_amount, total_average_price, total_profit_percentage
 
     def _rpc_merge_average(self, pair: str) -> Tuple[List]:
-        pairexist = Trade.get_trades(trade_filter=[Trade.pair == pair]).first()
-        if not pairexist:
-            logger.warning('merge trade: pair not found')
-            raise RPCException(f"Pair {pair} not found.")
         trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
         pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
-        if not pairtrades:
-            raise RPCException(f"No similar {pair} trades to merge.")
+        pairtrades_list = []
+        for pairtrade in pairtrades:
+            pairtrades_list.append(pairtrade.id)
+        if len(pairtrades_list) < 2:
+            raise RPCException(f"Need at least 2 trades to merge.")
         else:
-            trade_open_rate_list = []
-            trade_amount_list = []
-            trade_stake_amount_list = []
-            trade_open_date_list = []
-            trade_fee_open_list = []
-            trade_fee_close_list = []
-            trade_exchange_list = []
-            trade_open_order_id_list = []
-            trade_strategy_list = []
-            trade_buy_tag_list = []
-            trade_timeframe_list = []
-            trade_id_list = []
-
-            for pairtrade in pairtrades:
-                trade_open_rate_list.append(pairtrade.open_rate)
-                trade_amount_list.append(pairtrade.amount)
-                trade_stake_amount_list.append(pairtrade.stake_amount)
-                trade_open_date_list.append(pairtrade.open_date)
-                trade_fee_open_list.append(pairtrade.fee_open)
-                trade_fee_close_list.append(pairtrade.fee_close)
-                trade_exchange_list.append(pairtrade.exchange)
-                trade_open_order_id_list.append(pairtrade.open_order_id)
-                trade_strategy_list.append(pairtrade.strategy)
-                trade_buy_tag_list.append(pairtrade.buy_tag)
-                trade_timeframe_list.append(pairtrade.timeframe)
-                trade_id_list.append(pairtrade.id)
-
-            # fee = self.exchange.get_fee(symbol=pair, taker_or_maker='maker')
-            new_trade = Trade(
-                pair=pair,
-                stake_amount=sum(trade_stake_amount_list),
-                amount=sum(trade_amount_list),
-                is_open=True,
-                # amount_requested=amount_requested,
-                fee_open=trade_fee_open_list[-1],
-                fee_close=trade_fee_close_list[-1],
-                open_rate=float(sum(trade_open_rate_list)/len(trade_open_rate_list)),
-                # open_rate_requested=buy_limit_requested,
-                open_date=trade_open_date_list[-1],
-                exchange=trade_exchange_list[-1],
-                open_order_id=trade_open_order_id_list[-1],
-                strategy=trade_strategy_list[-1],
-                buy_tag=trade_buy_tag_list[-1],
-                timeframe=trade_timeframe_list[-1]
-            )
-            self._freqtrade.merge_average_trade(new_trade, trade_open_order_id_list[-1])
-            
+            self._freqtrade.merge_average_trade(pair)
             return trade_id_list
 
     def _rpc_daily_profit(
