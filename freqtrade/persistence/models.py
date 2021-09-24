@@ -662,7 +662,7 @@ class Trade(_DECL_BASE, LocalTrade):
     id = Column(Integer, primary_key=True)
 
     orders = relationship("Order", order_by="Order.id", cascade="all, delete-orphan")
-    dca_trade = relationship("DCA_Trade", order_by="DCA_Trade.id", cascade="all, delete-orphan")
+    dca_trades = relationship("DCA_Trade", order_by="DCA_Trade.id", cascade="all, delete-orphan")
 
     exchange = Column(String(25), nullable=False)
     pair = Column(String(25), nullable=False, index=True)
@@ -924,7 +924,7 @@ class PairLock(_DECL_BASE):
             'lock_end_timestamp': int(self.lock_end_time.replace(tzinfo=timezone.utc
                                                                  ).timestamp() * 1000),
             'reason': self.reason,
-            'active': self.active,
+            'active': self.active
         }
 
 
@@ -941,7 +941,7 @@ class DCA_Trade(_DECL_BASE, LocalTrade):
 
     id = Column(Integer, primary_key=True)
 
-    trade_id = Column(Integer, ForeignKey('trade.id'))
+    trade_id = Column(Integer, ForeignKey('trade.id'), nullable=False)
 
     exchange = Column(String(25), nullable=False)
     pair = Column(String(25), nullable=False, index=True)
