@@ -110,6 +110,13 @@ CONF_SCHEMA = {
             'minimum': 0.0001,
             'pattern': UNLIMITED_STAKE_AMOUNT
         },
+        'dca': {
+            'type': 'object',
+            'properties': {
+                'enabled': {'type': 'boolean', 'default': False},
+                'max_reopen': {'type': 'number', 'minimum': 1, 'default': 1}
+            }
+        },
         'tradable_balance_ratio': {
             'type': 'number',
             'minimum': 0.1,
@@ -405,6 +412,7 @@ SCHEMA_TRADE_REQUIRED = [
     'max_open_trades',
     'stake_currency',
     'stake_amount',
+    'dca',
     'tradable_balance_ratio',
     'last_stake_amount_min_ratio',
     'dry_run',
@@ -424,6 +432,7 @@ SCHEMA_BACKTEST_REQUIRED = [
     'max_open_trades',
     'stake_currency',
     'stake_amount',
+    'dca',
     'dry_run_wallet',
     'dataformat_ohlcv',
     'dataformat_trades',

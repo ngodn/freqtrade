@@ -81,6 +81,9 @@ def validate_config_consistency(conf: Dict[str, Any]) -> None:
     _validate_unlimited_amount(conf)
     _validate_ask_orderbook(conf)
 
+    # validating DCA
+    _validate_dca(conf)
+
     # validate configuration before returning
     logger.info('Validating configuration ...')
     validate_config_schema(conf)
@@ -95,6 +98,16 @@ def _validate_unlimited_amount(conf: Dict[str, Any]) -> None:
        and conf.get('max_open_trades') == float('inf')
        and conf.get('stake_amount') == constants.UNLIMITED_STAKE_AMOUNT):
         raise OperationalException("`max_open_trades` and `stake_amount` cannot both be unlimited.")
+
+
+def _validate_dca(conf: Dict[str, Any]) -> None:
+    """
+    If dca is enabled, max_open_trades need to be set to 2 for merging.
+    :raise: OperationalException if config validation failed
+    """
+    if (conf.get('dca', {}).get('enabled')
+       and conf.get('max_open_trades') < 2):
+        raise OperationalException("If dca is enabled, `max_open_trades` need to be set to `2` for merging.")
 
 
 def _validate_price_config(conf: Dict[str, Any]) -> None:
