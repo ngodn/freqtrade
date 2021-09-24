@@ -267,7 +267,8 @@ class Configuration:
                              logstring='Parameter --export detected: {} ...')
 
         self._args_to_config(config, argname='disableparamexport',
-                             logstring='Parameter --disableparamexport detected: {} ...')
+                             logstring='Parameter --disableparamexport detected: {} ...')        
+
         # Edge section:
         if 'stoploss_range' in self.args and self.args["stoploss_range"]:
             txt_range = eval(self.args["stoploss_range"])

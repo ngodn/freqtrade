@@ -599,6 +599,7 @@ class FreqtradeBot(LoggingMixin):
         pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
         if not pairtrades:
             raise RPCException(f"No similar {pair} trades to merge.")
+            return False
         else:
             trade_open_rate_list = []
             trade_amount_list = []
