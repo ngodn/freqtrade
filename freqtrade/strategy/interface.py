@@ -445,11 +445,12 @@ class IStrategy(ABC, HyperStrategyMixin):
         dataframe = self.advise_sell(dataframe, metadata)
 
         ### Trying to get Trade for 
-        try:
-            trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
-            dataframe = self.advise_dca(dataframe, metadata, trade)
-        except:
-            logger.debug("No open Trade found")
+        if self.config['dca']['enabled']:
+            try:
+                trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
+                dataframe = self.advise_dca(dataframe, metadata, trade)
+            except:
+                logger.debug("No open Trade found")
 
 
         return dataframe
