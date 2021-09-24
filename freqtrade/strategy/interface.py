@@ -448,7 +448,9 @@ class IStrategy(ABC, HyperStrategyMixin):
         ### Trying to get Trade for 
         if self.config['dca']['enabled']:
             try:
+                ### Get Trade for Populate_DCA
                 trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
+                ### Get DCA trades 
                 dca_trades = DCA_Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))
                 dataframe = self.advise_dca(dataframe, metadata, trade, dca_trades)
             except:
