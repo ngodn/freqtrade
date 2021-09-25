@@ -113,8 +113,7 @@ CONF_SCHEMA = {
         'dca': {
             'type': 'object',
             'properties': {
-                'enabled': {'type': 'boolean', 'default': False},
-                'max_reopen': {'type': 'number', 'minimum': 1, 'default': 1}
+                'enabled': {'type': 'boolean', 'default': False}
             }
         },
         'tradable_balance_ratio': {
