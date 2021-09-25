@@ -363,6 +363,10 @@ class LocalTrade():
         LocalTrade.trades = []
         LocalTrade.trades_open = []
         LocalTrade.total_profit = 0
+        # DCA Trades
+        LocalTrade.trades_dca_origin = []
+        LocalTrade.trades_dca_origin_open = []
+        # LocalTrade.dca_total_profit = 0
 
     def adjust_min_max_rates(self, current_price: float, current_price_low: float) -> None:
         """
