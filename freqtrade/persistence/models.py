@@ -662,6 +662,7 @@ class Trade(_DECL_BASE, LocalTrade):
     id = Column(Integer, primary_key=True)
 
     orders = relationship("Order", order_by="Order.id", cascade="all, delete-orphan")
+    dca_trades = relationship("DCA_Trade", order_by="DCA_Trade.id", cascade="all, delete-orphan")
 
     exchange = Column(String(25), nullable=False)
     pair = Column(String(25), nullable=False, index=True)
@@ -707,6 +708,8 @@ class Trade(_DECL_BASE, LocalTrade):
     strategy = Column(String(100), nullable=True)
     buy_tag = Column(String(100), nullable=True)
     timeframe = Column(Integer, nullable=True)
+
+    dca_reopened = Column(Integer, default=0)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -921,5 +924,229 @@ class PairLock(_DECL_BASE):
             'lock_end_timestamp': int(self.lock_end_time.replace(tzinfo=timezone.utc
                                                                  ).timestamp() * 1000),
             'reason': self.reason,
-            'active': self.active,
+            'active': self.active
         }
+
+
+class DCA_Trade(_DECL_BASE, LocalTrade):
+    """
+    Trade database model.
+    Also handles updating and querying trades
+
+    Note: Fields must be aligned with LocalTrade class
+    """
+    __tablename__ = 'dca_trades'
+
+    use_db: bool = True
+
+    id = Column(Integer, primary_key=True)
+
+    trade_id = Column(Integer, ForeignKey('trade.id'), nullable=False)
+
+    exchange = Column(String(25), nullable=False)
+    pair = Column(String(25), nullable=False, index=True)
+    is_open = Column(Boolean, nullable=False, default=True, index=True)
+    fee_open = Column(Float, nullable=False, default=0.0)
+    fee_open_cost = Column(Float, nullable=True)
+    fee_open_currency = Column(String(25), nullable=True)
+    fee_close = Column(Float, nullable=False, default=0.0)
+    fee_close_cost = Column(Float, nullable=True)
+    fee_close_currency = Column(String(25), nullable=True)
+    open_rate = Column(Float)
+    open_rate_requested = Column(Float)
+    # open_trade_value - calculated via _calc_open_trade_value
+    open_trade_value = Column(Float)
+    close_rate = Column(Float)
+    close_rate_requested = Column(Float)
+    close_profit = Column(Float)
+    close_profit_abs = Column(Float)
+    stake_amount = Column(Float, nullable=False)
+    amount = Column(Float)
+    amount_requested = Column(Float)
+    open_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    close_date = Column(DateTime)
+    open_order_id = Column(String(255))
+    # absolute value of the stop loss
+    stop_loss = Column(Float, nullable=True, default=0.0)
+    # percentage value of the stop loss
+    stop_loss_pct = Column(Float, nullable=True)
+    # absolute value of the initial stop loss
+    initial_stop_loss = Column(Float, nullable=True, default=0.0)
+    # percentage value of the initial stop loss
+    initial_stop_loss_pct = Column(Float, nullable=True)
+    # stoploss order id which is on exchange
+    stoploss_order_id = Column(String(255), nullable=True, index=True)
+    # last update time of the stoploss order on exchange
+    stoploss_last_update = Column(DateTime, nullable=True)
+    # absolute value of the highest reached price
+    max_rate = Column(Float, nullable=True, default=0.0)
+    # Lowest price reached
+    min_rate = Column(Float, nullable=True)
+    sell_reason = Column(String(100), nullable=True)
+    sell_order_status = Column(String(100), nullable=True)
+    strategy = Column(String(100), nullable=True)
+    buy_tag = Column(String(100), nullable=True)
+    timeframe = Column(Integer, nullable=True)
+
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.recalc_open_trade_value()
+
+    def delete(self) -> None:
+
+        for order in self.orders:
+            Order.query.session.delete(order)
+
+        DCA_Trade.query.session.delete(self)
+        DCA_Trade.commit()
+
+    @staticmethod
+    def commit():
+        DCA_Trade.query.session.commit()
+
+    @staticmethod
+    def get_trades_proxy(*, pair: str = None, is_open: bool = None,
+                         open_date: datetime = None, close_date: datetime = None,
+                         ) -> List['LocalTrade']:
+        """
+        Helper function to query Trades.j
+        Returns a List of trades, filtered on the parameters given.
+        In live mode, converts the filter to a database query and returns all rows
+        In Backtest mode, uses filters on DCA_Trade.trades to get the result.
+
+        :return: unsorted List[DCA_Trade]
+        """
+        if DCA_Trade.use_db:
+            trade_filter = []
+            if pair:
+                trade_filter.append(DCA_Trade.pair == pair)
+            if open_date:
+                trade_filter.append(DCA_Trade.open_date > open_date)
+            if close_date:
+                trade_filter.append(DCA_Trade.close_date > close_date)
+            if is_open is not None:
+                trade_filter.append(DCA_Trade.is_open.is_(is_open))
+            return DCA_Trade.get_trades(trade_filter).all()
+        else:
+            return LocalTrade.get_trades_proxy(
+                pair=pair, is_open=is_open,
+                open_date=open_date,
+                close_date=close_date
+            )
+
+    @staticmethod
+    def get_trades(trade_filter=None) -> Query:
+        """
+        Helper function to query Trades using filters.
+        NOTE: Not supported in Backtesting.
+        :param trade_filter: Optional filter to apply to trades
+                             Can be either a Filter object, or a List of filters
+                             e.g. `(trade_filter=[Trade.id == trade_id, Trade.is_open.is_(True),])`
+                             e.g. `(trade_filter=Trade.id == trade_id)`
+        :return: unsorted query object
+        """
+        if not DCA_Trade.use_db:
+            raise NotImplementedError('`Trade.get_trades()` not supported in backtesting mode.')
+        if trade_filter is not None:
+            if not isinstance(trade_filter, list):
+                trade_filter = [trade_filter]
+            return DCA_Trade.query.filter(*trade_filter)
+        else:
+            return DCA_Trade.query
+
+    @staticmethod
+    def get_open_order_trades():
+        """
+        Returns all open trades
+        NOTE: Not supported in Backtesting.
+        """
+        return DCA_Trade.get_trades(DCA_Trade.open_order_id.isnot(None)).all()
+
+    @staticmethod
+    def get_open_trades_without_assigned_fees():
+        """
+        Returns all open trades which don't have open fees set correctly
+        NOTE: Not supported in Backtesting.
+        """
+        return DCA_Trade.get_trades([DCA_Trade.fee_open_currency.is_(None),
+                                 DCA_Trade.orders.any(),
+                                 DCA_Trade.is_open.is_(True),
+                                 ]).all()
+
+    @staticmethod
+    def get_sold_trades_without_assigned_fees():
+        """
+        Returns all closed trades which don't have fees set correctly
+        NOTE: Not supported in Backtesting.
+        """
+        return DCA_Trade.get_trades([DCA_Trade.fee_close_currency.is_(None),
+                                 DCA_Trade.orders.any(),
+                                 DCA_Trade.is_open.is_(False),
+                                 ]).all()
+
+    @staticmethod
+    def get_total_closed_profit() -> float:
+        """
+        Retrieves total realized profit
+        """
+        if Trade.use_db:
+            total_profit = DCA_Trade.query.with_entities(
+                func.sum(DCA_Trade.close_profit_abs)).filter(DCA_Trade.is_open.is_(False)).scalar()
+        else:
+            total_profit = sum(
+                t.close_profit_abs for t in LocalTrade.get_trades_proxy(is_open=False))
+        return total_profit or 0
+
+    @staticmethod
+    def total_open_trades_stakes() -> float:
+        """
+        Calculates total invested amount in open trades
+        in stake currency
+        """
+        if DCA_Trade.use_db:
+            total_open_stake_amount = DCA_Trade.query.with_entities(
+                func.sum(DCA_Trade.stake_amount)).filter(DCA_Trade.is_open.is_(True)).scalar()
+        else:
+            total_open_stake_amount = sum(
+                t.stake_amount for t in LocalTrade.get_trades_proxy(is_open=True))
+        return total_open_stake_amount or 0
+
+    @staticmethod
+    def get_overall_performance() -> List[Dict[str, Any]]:
+        """
+        Returns List of dicts containing all Trades, including profit and trade count
+        NOTE: Not supported in Backtesting.
+        """
+        pair_rates = DCA_Trade.query.with_entities(
+            DCA_Trade.pair,
+            func.sum(DCA_Trade.close_profit).label('profit_sum'),
+            func.sum(DCA_Trade.close_profit_abs).label('profit_sum_abs'),
+            func.count(DCA_Trade.pair).label('count')
+        ).filter(DCA_Trade.is_open.is_(False))\
+            .group_by(DCA_Trade.pair) \
+            .order_by(desc('profit_sum_abs')) \
+            .all()
+        return [
+            {
+                'pair': pair,
+                'profit': profit,
+                'profit_abs': profit_abs,
+                'count': count
+            }
+            for pair, profit, profit_abs, count in pair_rates
+        ]
+
+    @staticmethod
+    def get_best_pair(start_date: datetime = datetime.fromtimestamp(0)):
+        """
+        Get best pair with closed trade.
+        NOTE: Not supported in Backtesting.
+        :returns: Tuple containing (pair, profit_sum)
+        """
+        best_pair = DCA_Trade.query.with_entities(
+            DCA_Trade.pair, func.sum(DCA_Trade.close_profit).label('profit_sum')
+        ).filter(DCA_Trade.is_open.is_(False) & (DCA_Trade.close_date >= start_date)) \
+            .group_by(DCA_Trade.pair) \
+            .order_by(desc('profit_sum')).first()
+        return best_pair

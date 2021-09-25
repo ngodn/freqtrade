@@ -2,6 +2,7 @@
 IStrategy interface
 This module defines the interface to apply for strategies
 """
+from freqtrade.persistence.models import DCA_Trade
 import logging
 import warnings
 from abc import ABC, abstractmethod
@@ -163,7 +164,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         return dataframe
     
     @abstractmethod
-    def populate_dca_rebuy(self, dataframe: DataFrame, metadata: dict, trade: Trade) -> DataFrame:
+    def populate_dca_rebuy(self, dataframe: DataFrame, metadata: dict, trade: Trade, dca_trades: List['DCA_Trade']) -> DataFrame:
         """
         Based on TA indicators, populates dca for the given dataframe
         :param dataframe: DataFrame
@@ -445,11 +446,15 @@ class IStrategy(ABC, HyperStrategyMixin):
         dataframe = self.advise_sell(dataframe, metadata)
 
         ### Trying to get Trade for 
-        try:
-            trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
-            dataframe = self.advise_dca(dataframe, metadata, trade)
-        except:
-            logger.debug("No open Trade found")
+        if self.config['dca']['enabled']:
+            try:
+                ### Get Trade for Populate_DCA
+                trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
+                ### Get DCA trades 
+                dca_trades = DCA_Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))
+                dataframe = self.advise_dca(dataframe, metadata, trade, dca_trades)
+            except:
+                logger.debug("No open Trade found")
 
 
         return dataframe
@@ -850,7 +855,7 @@ class IStrategy(ABC, HyperStrategyMixin):
             return self.populate_sell_trend(dataframe)  # type: ignore
         else:
             return self.populate_sell_trend(dataframe, metadata)
-    def advise_dca(self, dataframe: DataFrame, metadata: dict, trade: Trade) -> DataFrame:
+    def advise_dca(self, dataframe: DataFrame, metadata: dict, trade: Trade, dca_trades: DCA_Trade) -> DataFrame:
         """
         Based on TA indicators, populates the dca signal for the given dataframe
         This method should not be overridden.
@@ -860,5 +865,5 @@ class IStrategy(ABC, HyperStrategyMixin):
         :param Trade: Trade
         :return: DataFrame with sell column
         """
-        return self.populate_dca_rebuy(dataframe,metadata,trade)
+        return self.populate_dca_rebuy(dataframe,metadata,trade, DCA_Trade)
 
