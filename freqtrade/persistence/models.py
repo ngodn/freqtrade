@@ -221,6 +221,7 @@ class LocalTrade():
     exchange: str = ''
     pair: str = ''
     is_open: bool = True
+    is_dca_open: bool = True
     fee_open: float = 0.0
     fee_open_cost: Optional[float] = None
     fee_open_currency: str = ''
@@ -262,6 +263,9 @@ class LocalTrade():
     strategy: str = ''
     buy_tag: Optional[str] = None
     timeframe: Optional[int] = None
+
+    # dca
+    dca_origin_trades_id: Optional[list] = None
 
     def __init__(self, **kwargs):
         for key in kwargs:
@@ -346,6 +350,9 @@ class LocalTrade():
             'max_rate': self.max_rate,
 
             'open_order_id': self.open_order_id,
+
+            # dca
+            'dca_origin_trades_id': self.dca_origin_trades_id
         }
 
     @staticmethod
@@ -610,6 +617,40 @@ class LocalTrade():
                           and trade.close_date > close_date]
 
         return sel_trades
+
+    @staticmethod
+    def get_dca_origin_trades_proxy(*, pair: str = None, is_open: bool = None,
+                         open_date: datetime = None, close_date: datetime = None,
+                         ) -> List['LocalTrade']:
+        """
+        Helper function to query the origin trades before those were merged(before dca'ed).
+        Returns a List of origin trades, filtered on the parameters given.
+        In live mode, converts the filter to a database query and returns all rows from DCA Origin Trades
+        In Backtest mode, uses filters on Trade.trades_dca_origin to get the result.
+
+        :return: unsorted List[Trade]
+        """
+
+        # Offline mode - without database
+        if is_open is not None:
+            if is_dca_open:
+                dca_trades = LocalTrade.trades_dca_origin_open
+            else:
+                dca_trades = LocalTrade.trades_dca_origin
+
+        else:
+            # Not used during backtesting, but might be used by a strategy
+            dca_trades = list(LocalTrade.trades_dca_origin + LocalTrade.trades_dca_origin_open)
+
+        if pair:
+            dca_trades = [trade for trade in dca_trades if trade.pair == pair]
+        if open_date:
+            dca_trades = [trade for trade in dca_trades if trade.open_date > open_date]
+        if close_date:
+            dca_trades = [trade for trade in dca_trades if trade.close_date
+                          and trade.close_date > close_date]
+
+        return dca_trades
 
     @staticmethod
     def close_bt_trade(trade):
