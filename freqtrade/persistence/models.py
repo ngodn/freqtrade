@@ -670,6 +670,16 @@ class LocalTrade():
             LocalTrade.trades.append(trade)
 
     @staticmethod
+    def move_trade_to_dca_origin_trades(trade):
+        LocalTrade.trades_dca_origin_open.append(trade)
+        LocalTrade.trades_open.remove(trade)
+
+    @staticmethod
+    def close_bt_dca_trade(trade):
+        LocalTrade.trades_dca_origin_open.remove(trade)
+        LocalTrade.trades_dca_origin.append(trade)
+
+    @staticmethod
     def get_open_trades() -> List[Any]:
         """
         Query trades from persistence layer
