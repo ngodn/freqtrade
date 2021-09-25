@@ -210,6 +210,9 @@ class LocalTrade():
     trades: List['LocalTrade'] = []
     trades_open: List['LocalTrade'] = []
     total_profit: float = 0
+    trades_dca_origin: List['LocalTrade'] = []
+    trades_dca_origin_open: List['LocalTrade'] = []
+    # dca_total_profit: float = 0
 
     id: int = 0
 
