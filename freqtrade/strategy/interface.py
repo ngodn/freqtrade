@@ -445,17 +445,16 @@ class IStrategy(ABC, HyperStrategyMixin):
         dataframe = self.advise_buy(dataframe, metadata)
         dataframe = self.advise_sell(dataframe, metadata)
 
-        ### Trying to get Trade for 
-        if self.config['dca']['enabled']:
-            try:
-                ### Get Trade for Populate_DCA
-                trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
-                ### Get DCA trades 
-                dca_trades = DCA_Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))
-                dataframe = self.advise_dca(dataframe, metadata, trade, dca_trades)
-            except:
-                logger.debug("No open Trade found")
-
+        # ### Trying to get Trade for 
+        # if self.config['dca']['enabled']:
+        #     try:
+        #         ### Get Trade for Populate_DCA
+        #         trade = Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))[0]
+        #         ### Get DCA trades 
+        #         dca_trades = DCA_Trade.get_trades_proxy(is_open=True, pair=str(metadata.get('pair')))
+        #         dataframe = self.advise_dca(dataframe, metadata, trade, dca_trades)
+        #     except:
+        #         logger.debug("No open Trade found")
 
         return dataframe
 
@@ -855,15 +854,16 @@ class IStrategy(ABC, HyperStrategyMixin):
             return self.populate_sell_trend(dataframe)  # type: ignore
         else:
             return self.populate_sell_trend(dataframe, metadata)
-    def advise_dca(self, dataframe: DataFrame, metadata: dict, trade: Trade, dca_trades: DCA_Trade) -> DataFrame:
-        """
-        Based on TA indicators, populates the dca signal for the given dataframe
-        This method should not be overridden.
-        :param dataframe: DataFrame
-        :param metadata: Additional information dictionary, with details like the
-            currently traded pair
-        :param Trade: Trade
-        :return: DataFrame with sell column
-        """
-        return self.populate_dca_rebuy(dataframe,metadata,trade, DCA_Trade)
+
+    # def advise_dca(self, dataframe: DataFrame, metadata: dict, trade: Trade, dca_trades: DCA_Trade) -> DataFrame:
+    #     """
+    #     Based on TA indicators, populates the dca signal for the given dataframe
+    #     This method should not be overridden.
+    #     :param dataframe: DataFrame
+    #     :param metadata: Additional information dictionary, with details like the
+    #         currently traded pair
+    #     :param Trade: Trade
+    #     :return: DataFrame with sell column
+    #     """
+    #     return self.populate_dca_rebuy(dataframe,metadata,trade, DCA_Trade)
 
