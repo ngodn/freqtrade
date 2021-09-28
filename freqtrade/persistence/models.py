@@ -623,7 +623,7 @@ class LocalTrade():
         return sel_trades
 
     @staticmethod
-    def get_dca_origin_trades_proxy(*, pair: str = None, is_open: bool = None,
+    def get_dca_origin_trades_proxy(*, pair: str = None, is_open: bool = None, is_dca_open: bool = None,
                          open_date: datetime = None, close_date: datetime = None,
                          ) -> List['LocalTrade']:
         """
@@ -720,11 +720,15 @@ class Trade(_DECL_BASE, LocalTrade):
     id = Column(Integer, primary_key=True)
 
     orders = relationship("Order", order_by="Order.id", cascade="all, delete-orphan")
-    dca_trades = relationship("DCA_Trade", order_by="DCA_Trade.id", cascade="all, delete-orphan")
+    # dca_trades = relationship("DCA_Trade", order_by="DCA_Trade.id", cascade="all, delete-orphan")
+
+    trades_dca_origin = Column(List['Trade'], nullable=True)
+    trades_dca_origin_open = Column(List['Trade'], nullable=True)
 
     exchange = Column(String(25), nullable=False)
     pair = Column(String(25), nullable=False, index=True)
     is_open = Column(Boolean, nullable=False, default=True, index=True)
+    is_dca_open = Column(Boolean)
     fee_open = Column(Float, nullable=False, default=0.0)
     fee_open_cost = Column(Float, nullable=True)
     fee_open_currency = Column(String(25), nullable=True)
@@ -766,8 +770,8 @@ class Trade(_DECL_BASE, LocalTrade):
     strategy = Column(String(100), nullable=True)
     buy_tag = Column(String(100), nullable=True)
     timeframe = Column(Integer, nullable=True)
-
-    dca_reopened = Column(Integer, default=0)
+    # dca
+    dca_origin_trades_id = Column(Optional[list], default=None, nullable=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -930,6 +934,50 @@ class Trade(_DECL_BASE, LocalTrade):
             .group_by(Trade.pair) \
             .order_by(desc('profit_sum')).first()
         return best_pair
+
+    @staticmethod
+    def get_dca_origin_trades_proxy(*, pair: str = None, is_open: bool = None, is_dca_open: bool = None,
+                         open_date: datetime = None, close_date: datetime = None,
+                         ) -> List['LocalTrade']:
+        """
+        Helper function to query the origin trades before those were merged(before dca'ed).
+        Returns a List of origin trades, filtered on the parameters given.
+        In live mode, converts the filter to a database query and returns all rows from DCA Origin Trades
+        In Backtest mode, uses filters on Trade.trades_dca_origin to get the result.
+
+        :return: unsorted List[Trade]
+        """
+
+        # Offline mode - without database
+        if is_open is not None:
+            if is_dca_open:
+                dca_trades = Trade.trades_dca_origin_open
+            else:
+                dca_trades = Trade.trades_dca_origin
+
+        else:
+            # Not used during backtesting, but might be used by a strategy
+            dca_trades = list(Trade.trades_dca_origin + Trade.trades_dca_origin_open)
+
+        if pair:
+            dca_trades = [trade for trade in dca_trades if trade.pair == pair]
+        if open_date:
+            dca_trades = [trade for trade in dca_trades if trade.open_date > open_date]
+        if close_date:
+            dca_trades = [trade for trade in dca_trades if trade.close_date
+                          and trade.close_date > close_date]
+
+        return dca_trades
+    
+    @staticmethod
+    def move_trade_to_dca_origin_trades(trade):
+        Trade.trades_dca_origin_open.append(trade)
+        Trade.trades_open.remove(trade)
+
+    @staticmethod
+    def close_bt_dca_trade(trade):
+        Trade.trades_dca_origin_open.remove(trade)
+        Trade.trades_dca_origin.append(trade)
 
 
 class PairLock(_DECL_BASE):

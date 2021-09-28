@@ -105,8 +105,7 @@ def _validate_dca(conf: Dict[str, Any]) -> None:
     If dca is enabled, max_open_trades need to be set to minimum 2 for merging.
     :raise: OperationalException if config validation failed
     """
-    if (conf.get('dca', {}).get('enabled'):
-       and conf.get('max_open_trades') < 2):
+    if (conf.get('dca', {}).get('enabled') and conf.get('max_open_trades') < 2):
         raise OperationalException("If dca is enabled, `max_open_trades` need to be set to minimum `2` for merging.")
 
 
