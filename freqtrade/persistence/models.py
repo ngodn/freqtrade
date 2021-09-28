@@ -720,11 +720,12 @@ class Trade(_DECL_BASE, LocalTrade):
     id = Column(Integer, primary_key=True)
 
     orders = relationship("Order", order_by="Order.id", cascade="all, delete-orphan")
-    dca_trades = relationship("DCA_Trade", order_by="DCA_Trade.id", cascade="all, delete-orphan")
+    # dca_trades = relationship("DCA_Trade", order_by="DCA_Trade.id", cascade="all, delete-orphan")
 
     exchange = Column(String(25), nullable=False)
     pair = Column(String(25), nullable=False, index=True)
     is_open = Column(Boolean, nullable=False, default=True, index=True)
+    is_dca_open = Column(Boolean, nullable=True, default=False, index=True)
     fee_open = Column(Float, nullable=False, default=0.0)
     fee_open_cost = Column(Float, nullable=True)
     fee_open_currency = Column(String(25), nullable=True)
@@ -767,7 +768,7 @@ class Trade(_DECL_BASE, LocalTrade):
     buy_tag = Column(String(100), nullable=True)
     timeframe = Column(Integer, nullable=True)
 
-    dca_reopened = Column(Integer, default=0)
+    dca_origin_trades_id = Column(String(255), nullable=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
