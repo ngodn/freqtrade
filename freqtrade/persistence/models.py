@@ -623,7 +623,7 @@ class LocalTrade():
         return sel_trades
 
     @staticmethod
-    def get_dca_origin_trades_proxy(*, pair: str = None, is_open: bool = None,
+    def get_dca_origin_trades_proxy(*, pair: str = None, is_dca_open: bool = None,
                          open_date: datetime = None, close_date: datetime = None,
                          ) -> List['LocalTrade']:
         """
@@ -636,7 +636,7 @@ class LocalTrade():
         """
 
         # Offline mode - without database
-        if is_open is not None:
+        if is_dca_open is not None:
             if is_dca_open:
                 dca_trades = LocalTrade.trades_dca_origin_open
             else:
@@ -812,6 +812,36 @@ class Trade(_DECL_BASE, LocalTrade):
         else:
             return LocalTrade.get_trades_proxy(
                 pair=pair, is_open=is_open,
+                open_date=open_date,
+                close_date=close_date
+            )
+
+    @staticmethod
+    def get_dca_origin_trades_proxy(*, pair: str = None, is_dca_open: bool = None,
+                         open_date: datetime = None, close_date: datetime = None,
+                         ) -> List['LocalTrade']:
+        """
+        Helper function to query Trades.j
+        Returns a List of trades, filtered on the parameters given.
+        In live mode, converts the filter to a database query and returns all rows
+        In Backtest mode, uses filters on Trade.trades to get the result.
+
+        :return: unsorted List[Trade]
+        """
+        if Trade.use_db:
+            trade_filter = []
+            if pair:
+                trade_filter.append(Trade.pair == pair)
+            if open_date:
+                trade_filter.append(Trade.open_date > open_date)
+            if close_date:
+                trade_filter.append(Trade.close_date > close_date)
+            if is_dca_open is not None:
+                trade_filter.append(Trade.is_dca_open.is_(is_dca_open))
+            return Trade.get_trades(trade_filter).all()
+        else:
+            return LocalTrade.get_dca_origin_trades_proxy(
+                pair=pair, is_dca_open=is_dca_open,
                 open_date=open_date,
                 close_date=close_date
             )
