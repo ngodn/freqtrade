@@ -971,13 +971,13 @@ class Trade(_DECL_BASE, LocalTrade):
     
     @staticmethod
     def move_trade_to_dca_origin_trades(trade):
-        LocalTrade.trades_dca_origin_open.append(trade)
-        LocalTrade.trades_open.remove(trade)
+        Trade.trades_dca_origin_open.append(trade)
+        Trade.trades_open.remove(trade)
 
     @staticmethod
     def close_bt_dca_trade(trade):
-        LocalTrade.trades_dca_origin_open.remove(trade)
-        LocalTrade.trades_dca_origin.append(trade)
+        Trade.trades_dca_origin_open.remove(trade)
+        Trade.trades_dca_origin.append(trade)
 
 
 class PairLock(_DECL_BASE):
