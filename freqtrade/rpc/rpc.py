@@ -341,7 +341,7 @@ class RPC:
             raise RPCException(f"Need at least 2 trades to merge.")
         else:
             self._freqtrade.merge_average_trade(pair)
-            return trade_id_list
+            return pairtrades_list
 
     def _rpc_daily_profit(
             self, timescale: int,

@@ -847,7 +847,7 @@ class Trade(_DECL_BASE, LocalTrade):
             )
 
     @staticmethod
-    def generate_dca_origin_trades_id_for_merged_trade(merged_trade, origin_trades_id_list: List[str]) -> str:
+    def generate_dca_origin_trades_id_for_merged_trade(origin_trades_id_list: List[str]) -> str:
         dca_origin_trades_id = ','.join([str(elem) for elem in origin_trades_id_list])
         return dca_origin_trades_id
 
