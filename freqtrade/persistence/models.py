@@ -670,7 +670,7 @@ class LocalTrade():
             LocalTrade.trades.append(trade)
 
     @staticmethod
-    def move_trade_to_dca_origin_trades(trade):
+    def move_bt_trade_to_dca_origin_trades(trade):
         LocalTrade.trades_dca_origin_open.append(trade)
         LocalTrade.trades_open.remove(trade)
 
@@ -845,6 +845,17 @@ class Trade(_DECL_BASE, LocalTrade):
                 open_date=open_date,
                 close_date=close_date
             )
+
+    @staticmethod
+    def generate_dca_origin_trades_id_for_merged_trade(merged_trade, origin_trades_id_list: List[str]) -> str:
+        dca_origin_trades_id = ','.join([str(elem) for elem in origin_trades_id_list])
+        return dca_origin_trades_id
+
+    @staticmethod
+    def get_dca_origin_trades_id_from_merged_trade(merged_trade: Trade) -> List[str]:
+        dca_origin_trades_id = merged_trade.dca_origin_trades_id
+        split_id = dca_origin_trades_id.split(',')
+        return split_id
 
     @staticmethod
     def get_trades(trade_filter=None) -> Query:
