@@ -6,6 +6,7 @@ This module manage Telegram communication
 import json
 import logging
 import re
+import pickle
 from datetime import date, datetime, timedelta
 from html import escape
 from itertools import chain
@@ -94,10 +95,15 @@ class Telegram(RPCHandler):
         Validates the keyboard configuration from telegram config
         section.
         """
+        # self._keyboard: List[List[Union[str, KeyboardButton]]] = [
+        #     ['/daily', '/profit', '/balance'],
+        #     ['/status', '/status table', '/performance'],
+        #     ['/count', '/start', '/stop', '/help']
+        # ]
         self._keyboard: List[List[Union[str, KeyboardButton]]] = [
-            ['/daily', '/profit', '/balance'],
-            ['/status', '/status table', '/performance'],
-            ['/count', '/start', '/stop', '/help']
+            ['/daily', '/start', '/stop', '/help'],
+            ['/whitelist', '/profit', '/forcebuy'],
+            ['/balance', '/status table', '/performance']
         ]
         # do not allow commands with mandatory arguments and critical cmds
         # like /forcesell and /forcebuy
@@ -110,7 +116,7 @@ class Telegram(RPCHandler):
                                  r'/stats$', r'/count$', r'/locks$', r'/balance$',
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
                                  r'/logs$', r'/whitelist$', r'/blacklist$', r'/edge$',
-                                 r'/forcebuy$', r'/help$', r'/version$']
+                                 r'/forcebuy$', r'/help$', r'/version$', r'/avg$', r'/merge$']
         # Create keys for generation
         valid_keys_print = [k.replace('$', '') for k in valid_keys]
 
@@ -166,9 +172,12 @@ class Telegram(RPCHandler):
             CommandHandler('edge', self._edge),
             CommandHandler('help', self._help),
             CommandHandler('version', self._version),
+            CommandHandler('avg', self._avg),
+            CommandHandler('merge', self._merge),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
+            CallbackQueryHandler(self._avg, pattern='update_avg'),
             CallbackQueryHandler(self._daily, pattern='update_daily'),
             CallbackQueryHandler(self._profit, pattern='update_profit'),
             CallbackQueryHandler(self._balance, pattern='update_balance'),
@@ -436,6 +445,70 @@ class Telegram(RPCHandler):
                                query=update.callback_query)
         except RPCException as e:
             self._send_msg(str(e))
+
+    @authorized_only
+     def _avg(self, update: Update, context: CallbackContext) -> None:
+         """
+         Handler for /status table.
+         Returns the current TradeThread status in table format
+         :param bot: telegram bot
+         :param update: message update
+         :return: None
+         """
+         fiat_currency = self._config.get('fiat_display_currency', '')
+         sstake_currency = self._config['stake_currency']
+         # pair = context.args[0] if context.args and len(context.args) > 0 else None
+         pair = context.args[0] if context.args and len(context.args) > 0 else pickle.load( open( "save.p", "rb" ) )
+         if not pair:
+             self._send_msg("Pair not set. -/-avg CCC/SSSS")
+             return
+         try:
+             temp_pair = pair
+             pickle.dump( temp_pair, open( "save.p", "wb" ) )
+             statlist, head, fiat_profit_sum, total_amount, total_average_price, total_profit_percentage = self._rpc._rpc_average(
+                 pair, sstake_currency, fiat_currency)
+
+             show_total = not isnan(fiat_profit_sum) and len(statlist) > 1
+             max_trades_per_msg = 50
+             """
+             Calculate the number of messages of 50 trades per message
+             0.99 is used to make sure that there are no extra (empty) messages
+             As an example with 50 trades, there will be int(50/50 + 0.99) = 1 message
+             """
+             messages_count = max(int(len(statlist) / max_trades_per_msg + 0.99), 1)
+             for i in range(0, messages_count):
+                 trades = statlist[i * max_trades_per_msg:(i + 1) * max_trades_per_msg]
+                 if show_total and i == messages_count - 1:
+                     # append total line
+                     # trades.append(["Average", "", "", f"{fiat_profit_sum:.2f} {total_average_price}"])
+                     trades.append(["Avg :", f"{total_amount}", f"{total_average_price}", f"{total_profit_percentage}"])
+
+                 message = tabulate(trades,
+                                    headers=head,
+                                    tablefmt='simple')
+                 if show_total and i == messages_count - 1:
+                     # insert separators line between Total
+                     lines = message.split("\n")
+                     message = f"{pair}\n"+"\n".join(lines[:-1] + [lines[1]] + [lines[-1]])
+                 self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML,
+                                reload_able=True, callback_path="update_avg",
+                                query=update.callback_query)
+         except RPCException as e:
+             self._send_msg(str(e))
+
+     @authorized_only
+     def _merge(self, update: Update, context: CallbackContext) -> None:
+         pair = context.args[0] if context.args and len(context.args) > 0 else None
+         if not pair:
+             self._send_msg("Pair not set. -/-merge CCC/SSSS")
+             return
+         try:
+             trade_id_list = self._rpc._rpc_merge_average(pair)
+             self._send_msg(f"Trade {trade_id_list} of {pair} have been merged.")
+             for trade_id in trade_id_list:
+                 self._rpc._rpc_delete(trade_id)
+         except RPCException as e:
+             self._send_msg(str(e))
 
     @authorized_only
     def _daily(self, update: Update, context: CallbackContext) -> None:
@@ -1053,8 +1126,8 @@ class Telegram(RPCHandler):
         :param update: message update
         :return: None
         """
-        forcebuy_text = ("*/forcebuy <pair> [<rate>]:* `Instantly buys the given pair. "
-                         "Optionally takes a rate at which to buy.` \n")
+        forcebuy_text = ("*/forcebuy <pair> [<rate>] [<stack_amount>]:* `Instantly buys the given pair. "
+                         "Optionally takes a rate at which to buy and the custom stake amount.` \n")
         message = ("*/start:* `Starts the trader`\n"
                    "*/stop:* `Stops the trader`\n"
                    "*/status <trade_id>|[table]:* `Lists all open trades`\n"
@@ -1070,6 +1143,8 @@ class Telegram(RPCHandler):
                    "regardless of profit`\n"
                    f"{forcebuy_text if self._config.get('forcebuy_enable', False) else ''}"
                    "*/delete <trade_id>:* `Instantly delete the given trade in the database`\n"
+                   "*/avg <pair>:* `Shows the averaging down calculation of given pair.`\n"
+                   "*/merge <pair>:* `Merge open trades of given pair.`\n"
                    "*/performance:* `Show performance of each finished trade grouped by pair`\n"
                    "*/daily <n>:* `Shows profit or loss per day, over the last n days`\n"
                    "*/stats:* `Shows Wins / losses by Sell reason as well as "
