@@ -646,7 +646,8 @@ class FreqtradeBot(LoggingMixin):
                 is_open=True,
                 amount_requested=float(sum(trade_amount_requested_list)),
                 fee_open=float(sum(trade_fee_open_list) / len(trade_fee_open_list)),
-                fee_open_cost=sum(trade_fee_open_cost_list),
+                # fee_open_cost=sum(trade_fee_open_cost_list),
+                fee_open_cost=sum(filter(None, trade_fee_open_cost_list)),
                 fee_open_currency=trade_fee_open_currency_list[-1], # not sure how to handle multiple fee currencies
                 fee_close=float(sum(trade_fee_close_list) / len(trade_fee_close_list)),
                 open_rate=float(sum(trade_stake_amount_list) / sum(trade_amount_list)),
