@@ -848,16 +848,20 @@ class Telegram(RPCHandler):
             custom_stake_amount = 0.0
 
             if len(context.args) is 3:
-                if context.args[1] is 0:
+                if context.args[2] is 0:
                     pair = context.args[0]
                     price = None
-                    custom_stake_amount = float(context.args[2])
+                    custom_stake_amount = float(context.args[1])
                     self._forcebuy_action(pair, None, custom_stake_amount)
                 else:
                     pair = context.args[0]
-                    price = float(context.args[1])
-                    custom_stake_amount = float(context.args[2])
+                    price = float(context.args[2])
+                    custom_stake_amount = float(context.args[1])
                     self._forcebuy_action(pair, price, custom_stake_amount)
+            elif len(context.args) is 2:
+                pair = context.args[0]
+                custom_stake_amount = float(context.args[1])
+                self._forcebuy_action(pair, None, custom_stake_amount)
             elif len(context.args) is 1:
                 pair = context.args[0]
                 self._forcebuy_action(pair, None, None)
