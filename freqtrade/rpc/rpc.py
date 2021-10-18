@@ -266,6 +266,7 @@ class RPC:
 
             trade_open_rate_list = []
             trade_amount_list = []
+            trade_stake_amount_list = []
             trade_fee_list = []
             trade_fee_open_list = []
             trade_fee_close_list = []
@@ -302,6 +303,7 @@ class RPC:
                 # trade_avg_price = pairtrade.stake_amount / pairtrade.amount
                 trade_open_rate_list.append(pairtrade.open_rate)
                 trade_amount_list.append(pairtrade.amount)
+                trade_stake_amount_list.append(pairtrade.stake_amount)
                 trade_fee_open_list.append(pairtrade.fee_open)
                 trade_fee_close_list.append(pairtrade.fee_close)
 
@@ -345,7 +347,7 @@ class RPC:
             raise RPCException(f"Need at least 2 trades to merge.")
         else:
             self._freqtrade.merge_average_trade(pair)
-            return trade_id_list
+            return pairtrades_list
 
     def _rpc_daily_profit(
             self, timescale: int,

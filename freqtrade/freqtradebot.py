@@ -603,6 +603,7 @@ class FreqtradeBot(LoggingMixin):
         else:
             trade_open_rate_list = []
             trade_amount_list = []
+            trade_amount_requested_list = []
             trade_stake_amount_list = []
             trade_open_date_list = []
             trade_fee_open_list = []
