@@ -607,6 +607,8 @@ class FreqtradeBot(LoggingMixin):
             trade_stake_amount_list = []
             trade_open_date_list = []
             trade_fee_open_list = []
+            trade_fee_open_cost_list = []
+            trade_fee_open_currency_list = []
             trade_fee_close_list = []
             trade_exchange_list = []
             trade_open_order_id_list = []
@@ -614,6 +616,8 @@ class FreqtradeBot(LoggingMixin):
             trade_buy_tag_list = []
             trade_timeframe_list = []
             trade_id_list = []
+            max_rate = 0
+            min_rate = 0
 
             for pairtrade in pairtrades:
                 trade_open_rate_list.append(pairtrade.open_rate)
@@ -622,6 +626,8 @@ class FreqtradeBot(LoggingMixin):
                 trade_stake_amount_list.append(pairtrade.stake_amount)
                 trade_open_date_list.append(pairtrade.open_date)
                 trade_fee_open_list.append(pairtrade.fee_open)
+                trade_fee_open_cost_list.append(pairtrade.fee_open_cost),                
+                trade_fee_open_currency_list.append(pairtrade.fee_open_currency),
                 trade_fee_close_list.append(pairtrade.fee_close)
                 trade_exchange_list.append(pairtrade.exchange)
                 trade_open_order_id_list.append(pairtrade.open_order_id)
@@ -629,6 +635,8 @@ class FreqtradeBot(LoggingMixin):
                 trade_buy_tag_list.append(pairtrade.buy_tag)
                 trade_timeframe_list.append(pairtrade.timeframe)
                 trade_id_list.append(pairtrade.id)
+                max_rate = pairtrade.max_rate if max_rate is 0 or pairtrade.max_rate > max_rate else max_rate
+                min_rate = pairtrade.min_rate if min_rate is 0 or pairtrade.min_rate < min_rate else min_rate
 
             # fee = self.exchange.get_fee(symbol=pair, taker_or_maker='maker')
             new_trade = Trade(
@@ -637,17 +645,19 @@ class FreqtradeBot(LoggingMixin):
                 amount=sum(trade_amount_list),
                 is_open=True,
                 amount_requested=float(sum(trade_amount_requested_list)),
-                fee_open=sum(trade_fee_open_list),
-                fee_close=sum(trade_fee_close_list),
-                open_rate=float(sum(trade_stake_amount_list) / sum(trade_amount_list)), 
-                # open_rate=float(sum(trade_open_rate_list)/len(trade_open_rate_list)),
-                # open_rate_requested=buy_limit_requested,
+                fee_open=float(sum(trade_fee_open_list) / len(trade_fee_open_list)),
+                fee_open_cost=sum(trade_fee_open_cost_list),
+                fee_open_currency=trade_fee_open_currency_list[-1], # not sure how to handle multiple fee currencies
+                fee_close=float(sum(trade_fee_close_list) / len(trade_fee_close_list)),
+                open_rate=float(sum(trade_stake_amount_list) / sum(trade_amount_list)),
                 open_date=trade_open_date_list[-1],
                 exchange=trade_exchange_list[-1],
                 open_order_id=trade_open_order_id_list[-1],
                 strategy=trade_strategy_list[-1],
                 buy_tag=trade_buy_tag_list[-1],
-                timeframe=trade_timeframe_list[-1]
+                timeframe=trade_timeframe_list[-1],
+                max_rate=max_rate,
+                min_rate=min_rate
             )
 
             self.update_trade_to_merge(new_trade, trade_open_order_id_list[-1])
