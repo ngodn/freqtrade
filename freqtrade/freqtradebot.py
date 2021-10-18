@@ -927,6 +927,22 @@ class FreqtradeBot(LoggingMixin):
             return True
         return False
 
+    def _check_and_execute_rebuy(self, trade: Trade, current_rate: float) -> bool:
+        """
+        Check and execute rebuy
+        """
+        pair, buy_tag = self.strategy.should_buy(
+            trade, sell_rate, datetime.now(timezone.utc), buy, sell,
+            force_stoploss=self.edge.stoploss(trade.pair) if self.edge else 0
+        )
+
+        if pair and buy_tag:
+            if self.execute_entry(pair, stakeamount, price, forcebuy=True):
+                Trade.commit()
+                return True
+
+        return False
+
     def _check_timed_out(self, side: str, order: dict) -> bool:
         """
         Check if timeout is active, and if the order is still open and timed out

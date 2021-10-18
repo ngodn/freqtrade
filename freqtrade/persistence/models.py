@@ -852,7 +852,9 @@ class Trade(_DECL_BASE, LocalTrade):
         return dca_origin_trades_id
 
     @staticmethod
-    def get_dca_origin_trades_id_from_merged_trade(merged_trade: Trade) -> List[str]:
+    def get_dca_origin_trades_id_from_merged_trade(pair: str) -> List[str]:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair) & (len(Trade.dca_origin_trades_id) > 2))
+        merged_trade = Trade.get_trades(trade_filter).order_by(Trade.id).all()
         dca_origin_trades_id = merged_trade.dca_origin_trades_id
         split_id = dca_origin_trades_id.split(',')
         return split_id

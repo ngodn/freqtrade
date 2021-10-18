@@ -6,7 +6,7 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 
 import arrow
 from pandas import DataFrame
@@ -21,8 +21,6 @@ from freqtrade.persistence import PairLocks, Trade
 from freqtrade.strategy.hyper import HyperStrategyMixin
 from freqtrade.strategy.strategy_wrapper import strategy_safe_wrapper
 from freqtrade.wallets import Wallets
-from freqtrade.rpc import RPCManager
-
 
 logger = logging.getLogger(__name__)
 CUSTOM_SELL_MAX_LENGTH = 64
@@ -42,7 +40,6 @@ class SellCheckTuple(object):
     @property
     def sell_flag(self):
         return self.sell_type != SellType.NONE
-
 
 class IStrategy(ABC, HyperStrategyMixin):
     """
@@ -129,9 +126,9 @@ class IStrategy(ABC, HyperStrategyMixin):
 
     def __init__(self, config: dict) -> None:
         self.config = config
+        self._freqtrade = freqtrade
         # Dict to determine if analysis is necessary
         self._last_candle_seen_per_pair: Dict[str, datetime] = {}
-        self.rpc: RPCManager = RPCManager(self)
         super().__init__(config)
 
     @abstractmethod
@@ -164,15 +161,15 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         return dataframe
     
-    @abstractmethod
-    def populate_dca_rebuy(self, dataframe: DataFrame, metadata: dict, trade: Trade, dca_trades: List['DCA_Trade']) -> DataFrame:
-        """
-        Based on TA indicators, populates dca for the given dataframe
-        :param dataframe: DataFrame
-        :param metadata: Additional information, like the currently traded pair
-        :return: DataFrame with buy column
-        """
-        return dataframe
+    # @abstractmethod
+    # def populate_dca_rebuy(self, dataframe: DataFrame, metadata: dict, trade: Trade, dca_trades: List['DCA_Trade']) -> DataFrame:
+    #     """
+    #     Based on TA indicators, populates dca for the given dataframe
+    #     :param dataframe: DataFrame
+    #     :param metadata: Additional information, like the currently traded pair
+    #     :return: DataFrame with buy column
+    #     """
+    #     return dataframe
 
     def check_buy_timeout(self, pair: str, trade: Trade, order: dict, **kwargs) -> bool:
         """
@@ -352,6 +349,29 @@ class IStrategy(ABC, HyperStrategyMixin):
         None or False.
         """
         return None
+
+    def custom_buy(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
+                    current_profit: float, **kwargs) -> Tuple[str, str]:
+        """
+        Custom buy signal logic indicating that specified position should reopen another buy. Returning a
+        string or True from this method is equal to setting buy signal on a candle at specified
+        time. This method is not called if DCA is not enabled in config.
+
+        This method should be overridden to create buy signals for DCA. For
+        example you could implement a buy relative to the current_profit
+
+        Custom buy reason max length is 64. Exceeding characters will be removed.
+
+        :param pair: Pair that's currently analyzed
+        :param trade: trade object.
+        :param current_time: datetime object, containing the current datetime
+        :param current_rate: Rate, calculated based on pricing settings in ask_strategy.
+        :param current_profit: Current profit (as ratio), calculated based on current_rate.
+        :param **kwargs: Ensure to keep this here so updates to this won't break your strategy.
+        :return: To execute buy, return the pair and the buy_tag. Otherwise return
+        empty string for both.
+        """
+        return '', ''
 
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
                             proposed_stake: float, min_stake: float, max_stake: float,
@@ -696,6 +716,37 @@ class IStrategy(ABC, HyperStrategyMixin):
         # logger.debug(f"{trade.pair} - No sell signal.")
         return SellCheckTuple(sell_type=SellType.NONE)
 
+    def should_rebuy(self, trade: Trade, rate: float, date: datetime, buy: bool,
+                    sell: bool, low: float = None, high: float = None,
+                    force_stoploss: float = 0) -> Tuple[str, str]:
+        """
+        This function triggers a re-buy and pass it to Freqtrade instance
+        has been reached.
+        :param low: Only used during backtesting to simulate stoploss
+        :param high: Only used during backtesting, to simulate ROI
+        :param force_stoploss: Externally provided stoploss
+        :return: True if DCA should be executed, False otherwise
+        """
+        current_rate = rate
+        current_profit = trade.calc_profit_ratio(current_rate)
+
+        trade.adjust_min_max_rates(high or current_rate, low or current_rate)
+
+        # Set current rate to low for backtesting re-buy
+        current_rate = low or rate
+        current_profit = trade.calc_profit_ratio(current_rate)
+
+        sell_signal = SellType.NONE
+        custom_reason = ''
+        # use provided rate in backtesting, not high/low.
+        current_rate = rate
+        current_profit = trade.calc_profit_ratio(current_rate)
+
+        pair, buy_tag = strategy_safe_wrapper(self.custom_buy, default_retval=False)(
+                    pair=trade.pair, trade=trade, current_time=date, current_rate=current_rate,
+                    current_profit=current_profit)
+        return pair, buy_tag
+
     def stop_loss_reached(self, current_rate: float, trade: Trade,
                           current_time: datetime, current_profit: float,
                           force_stoploss: float, low: float = None,
@@ -873,7 +924,8 @@ class IStrategy(ABC, HyperStrategyMixin):
         pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
         if not pairtrades:
             logger.error(f"No similar {pair} trades to merge.")
-            # self.rpc.send_msg(f"No similar {pair} trades to merge.")
+            # self.freqtrade.notify_status(f"No similar {pair} trades to merge.")
+            # self.rpc.send_msg(f"No similar{pair} trades to merge.")
             # raise RPCException(f"No similar {pair} trades to merge.")
             return False
         else:
@@ -935,7 +987,6 @@ class IStrategy(ABC, HyperStrategyMixin):
 
             msg = f"Trade {trade_id_list} of {pair} have been merged."
             logger.info(msg)
-            self.rpc.send_msg(msg)
 
             for pairtrade in pairtrades:
                 pairtrade.is_open = False
