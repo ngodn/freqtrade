@@ -585,7 +585,7 @@ class RPC:
             self._freqtrade.wallets.update()
             return {'result': f'Created sell order for trade {trade_id}.'}
 
-    def _rpc_forcebuy(self, pair: str, price: Optional[float]) -> Optional[Trade]:
+    def _rpc_forcebuy(self, pair: str, price: Optional[float], custom_stake_amount: Optional[float]) -> Optional[Trade]:
         """
         Handler for forcebuy <asset> <price>
         Buys a pair trade at the given or current price
@@ -610,7 +610,10 @@ class RPC:
         #     raise RPCException(f'position for {pair} already open - id: {trade.id}')
 
         # gen stake amount
-        stakeamount = self._freqtrade.wallets.get_trade_stake_amount(pair)
+        if custom_stake_amount:
+            stakeamount = custom_stake_amount
+        else:
+            stakeamount = self._freqtrade.wallets.get_trade_stake_amount(pair)
 
         # execute buy
         if self._freqtrade.execute_entry(pair, stakeamount, price, forcebuy=True):
@@ -619,6 +622,41 @@ class RPC:
             return trade
         else:
             return None
+
+    # def _rpc_forcebuy(self, pair: str, price: Optional[float]) -> Optional[Trade]:
+    #     """
+    #     Handler for forcebuy <asset> <price>
+    #     Buys a pair trade at the given or current price
+    #     """
+
+    #     if not self._freqtrade.config.get('forcebuy_enable', False):
+    #         raise RPCException('Forcebuy not enabled.')
+
+    #     if self._freqtrade.state != State.RUNNING:
+    #         raise RPCException('trader is not running')
+
+    #     # Check if pair quote currency equals to the stake currency.
+    #     stake_currency = self._freqtrade.config.get('stake_currency')
+    #     if not self._freqtrade.exchange.get_pair_quote_currency(pair) == stake_currency:
+    #         raise RPCException(
+    #             f'Wrong pair selected. Only pairs with stake-currency {stake_currency} allowed.')
+    #     # check if valid pair
+
+    #     # check if pair already has an open pair
+    #     trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
+    #     if trade:
+    #         raise RPCException(f'position for {pair} already open - id: {trade.id}')
+
+    #     # gen stake amount
+    #     stakeamount = self._freqtrade.wallets.get_trade_stake_amount(pair)
+
+    #     # execute buy
+    #     if self._freqtrade.execute_entry(pair, stakeamount, price, forcebuy=True):
+    #         Trade.commit()
+    #         trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
+    #         return trade
+    #     else:
+    #         return None
 
     def _rpc_delete(self, trade_id: int) -> Dict[str, Union[str, int]]:
         """

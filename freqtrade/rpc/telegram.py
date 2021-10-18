@@ -718,9 +718,15 @@ class Telegram(RPCHandler):
         except RPCException as e:
             self._send_msg(str(e))
 
-    def _forcebuy_action(self, pair, price=None):
+    # def _forcebuy_action(self, pair, price=None):
+    #     try:
+    #         self._rpc._rpc_forcebuy(pair, price)
+    #     except RPCException as e:
+    #         self._send_msg(str(e))
+
+    def _forcebuy_action(self, pair, price=None, custom_stake_amount=None):
         try:
-            self._rpc._rpc_forcebuy(pair, price)
+            self._rpc._rpc_forcebuy(pair, price, custom_stake_amount)
         except RPCException as e:
             self._send_msg(str(e))
 
@@ -737,6 +743,27 @@ class Telegram(RPCHandler):
                                 cols=3) -> List[List[InlineKeyboardButton]]:
         return [buttons[i:i + cols] for i in range(0, len(buttons), cols)]
 
+    # @authorized_only
+    # def _forcebuy(self, update: Update, context: CallbackContext) -> None:
+    #     """
+    #     Handler for /forcebuy <asset> <price>.
+    #     Buys a pair trade at the given or current price
+    #     :param bot: telegram bot
+    #     :param update: message update
+    #     :return: None
+    #     """
+    #     if context.args:
+    #         pair = context.args[0]
+    #         price = float(context.args[1]) if len(context.args) > 1 else None
+    #         self._forcebuy_action(pair, price)
+    #     else:
+    #         whitelist = self._rpc._rpc_whitelist()['whitelist']
+    #         pairs = [InlineKeyboardButton(text=pair, callback_data=pair) for pair in whitelist]
+
+    #         self._send_msg(msg="Which pair?",
+    #                        keyboard=self._layout_inline_keyboard(pairs))
+
+
     @authorized_only
     def _forcebuy(self, update: Update, context: CallbackContext) -> None:
         """
@@ -748,8 +775,24 @@ class Telegram(RPCHandler):
         """
         if context.args:
             pair = context.args[0]
-            price = float(context.args[1]) if len(context.args) > 1 else None
-            self._forcebuy_action(pair, price)
+            price = 0.0
+            custom_stake_amount = 0.0
+
+            if len(context.args) is 3:
+                if context.args[1] is 0:
+                    pair = context.args[0]
+                    price = None
+                    custom_stake_amount = float(context.args[2])
+                    self._forcebuy_action(pair, None, custom_stake_amount)
+                else:
+                    pair = context.args[0]
+                    price = float(context.args[1])
+                    custom_stake_amount = float(context.args[2])
+                    self._forcebuy_action(pair, price, custom_stake_amount)
+            elif len(context.args) is 1:
+                pair = context.args[0]
+                self._forcebuy_action(pair, None, None)
+
         else:
             whitelist = self._rpc._rpc_whitelist()['whitelist']
             pairs = [InlineKeyboardButton(text=pair, callback_data=pair) for pair in whitelist]
